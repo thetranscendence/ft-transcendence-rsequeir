@@ -1,0 +1,50 @@
+services:
+  # ==============================================================================
+  # SERVICE: HASHICORP VAULT
+  # Module: Cybersecurity (Gestion des secrets & PKI)
+  # Description: Serveur de gestion de secrets lancé en mode développement.
+  # ==============================================================================
+  vault:
+    # Utilisation d'une version spécifique (1.13.3) pour assurer la stabilité et
+    # éviter les surprises (breaking changes) liées au tag 'latest'.
+    image: hashicorp/vault:1.13.3
+    container_name: vault
+
+    # Exposition du port 8200 pour l'accès API et l'interface web (UI) depuis l'hôte
+    ports:
+      - "8200:8200"
+
+    
+    environment:
+      # --------------------------------------------------------------------------
+      # CONFIGURATION DE DÉVELOPPEMENT
+      # --------------------------------------------------------------------------
+      # Injection du token "Root" depuis le fichier .env.
+      # Permet de respecter la consigne de ne pas commiter de secrets.
+      # [Ref Subject: IV.4 Security concerns - "Publicly stored credentials..."]
+      - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_ROOT_TOKEN}
+      
+      # Configuration réseau : écoute sur 0.0.0.0 pour être accessible
+      # par les autres conteneurs du réseau Docker.
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+      
+      # Adresse explicite pour l'API interne (client CLI local).
+      - VAULT_API_ADDR=http://127.0.0.1:8200
+    
+    # --------------------------------------------------------------------------
+    # SÉCURITÉ SYSTÈME
+    # --------------------------------------------------------------------------
+    # IPC_LOCK : Permet au processus de verrouiller la mémoire vive (mloc).
+    # Empêche le système d'écrire des secrets sensibles (stockés en RAM)
+    # sur le disque dur via le mécanisme de SWAP.
+    cap_add:
+      - IPC_LOCK 
+    
+    # --------------------------------------------------------------------------
+    # COMMANDE DE DÉMARRAGE
+    # --------------------------------------------------------------------------
+    # server -dev : Lance Vault en mode développement.
+    # - Stockage 100% en mémoire (inmem)
+    # - Auto-Unseal (déverrouillage automatique au démarrage)
+    # - UI activée par défaut
+    command: server -dev

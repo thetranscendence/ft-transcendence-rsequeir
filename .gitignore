@@ -1,0 +1,10 @@
+# ==============================================================================
+# SÉCURITÉ & CONFIGURATION LOCALE
+# ==============================================================================
+# Les fichiers d'environnement contiennent des secrets. Ils sont strictement interdits sur le dépôt.
+# [Ref Subject: IV.4 Security concerns]
+.env
+
+# On autorise les exemples pour aider les autres développeurs
+!.env.example
+
