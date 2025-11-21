@@ -48,3 +48,43 @@ services:
     # - Auto-Unseal (déverrouillage automatique au démarrage)
     # - UI activée par défaut
     command: server -dev
+
+  # ==============================================================================
+  # SERVICE: RABBITMQ
+  # Module: Devops (Microservices Communication)
+  # Description: Broker de messages pour la communication asynchrone.
+  # ==============================================================================
+  rabbitmq:
+    # Utilisation de la version "management" pour avoir l'interface web incluse.
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+
+    # Définition du hostname pour une résolution DNS interne stable
+    hostname: rabbitmq
+
+    ports:
+      - "5672:5672"   # Port standard AMQP (utilisé par les microservices)
+      - "15672:15672" # Interface de gestion Web (http://localhost:15672)
+
+    environment:
+      # Initialisation du super-utilisateur RabbitMQ via les variables du .env
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+
+    volumes:
+      # Persistance des données (files d'attente, messages non consommées)
+      - rabbitmq_data:/var/lib/rabbitmq
+
+    # Healthcheck : S'assure que le broker est prêt à accepter des connexions
+    # Indispensable pour que les microservices attendent avant de se connecter.
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ==============================================================================
+# VOLUMES
+# ==============================================================================
+volumes:
+  rabbitmq_data:
