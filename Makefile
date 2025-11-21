@@ -1,8 +1,9 @@
 # ==============================================================================
 # MAKEFILE - GESTION DE L'INFRASTRUCTURE (ft_transcendence)
 # ==============================================================================
-# Ce Makefile permet de piloter l'ensemble de l'environnement Docker.
-# Il gère l'injection des variables d'environnement et le cycle de vie des conteneurs.
+# Ce Makefile est le point d'entrée unique pour piloter l'environnement Docker.
+# Il garantit une exécution standardisée et respecte les contraintes du sujet.
+#
 # [Ref Subject: IV.2 Minimal technical requirement - Single command line execution]
 # ==============================================================================
 
@@ -11,52 +12,74 @@
 # Chemin vers le fichier de configuration Docker Compose principal
 COMPOSE_FILE	= infrastructure/docker-compose.yml
 
-# Fichier contenant les secrets et variables (ne doit pas être commité)
+# Fichier contenant les secrets (ne doit PAS être commité).
+# Utilisé pour injecter le VAULT_ROOT_TOKEN et les configurations initiales.
 # [Ref Subject: IV.4 Security concerns]
 ENV_FILE			= .env
 
-# --- COMMANDE BASE DOCKER ---
+# --- MOTEUR DOCKER ---
 
-# Construction de la commande Docker Compose.
-# L'option '--env-file' est CRUCIALE ici : elle force Docker à lire le fichier .env
-# situé à la racine du projet, même si le fichier YAML est dans un sous-dossier.
-# Sans cela, les variables ne seraient pas trouvées.
+# Construction de la commande de base.
+# L'option '--env-file' est CRUCIALE : elle force Docker à charger les variables
+# depuis la racine du projet, rendant le .env accessible au docker-compose.yml
+# situé dans le sous-dossier 'infrastructure/'.
 DOCKER_CMD		= docker compose --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
 
 # ==============================================================================
-# RÈGLES
+# RÈGLES PRINCIPALES
 # ==============================================================================
 
-# Règle par défaut : lance l'application
+# Règle par défaut : Démarre l'ensemble de la stack
 all: up
 
-# Démarre les services en arrière-plan (Detached mode)
-# --build : Force la reconstruction des images si le Dockerfile a changé
+# Démarrage des services en mode détaché (arrière-plan)
+# --build : Force la recompilation des images si les Dockerfiles ont changé.
 up:
 	@echo "Démarrage de l'infrastructure ft_transcendence..."
 	$(DOCKER_CMD) up -d --build
 
-# Arrête et supprime les conteneurs et les réseaux créés par 'up'
+# Arrêt propre des services (conserve les volumes et les réseaux)
 down:
-	@echo "Arrêt des services..."
+	@echo "Arrêt des services en cours..."
 	$(DOCKER_CMD) down
 
-# Affiche les logs de tous les services en temps réel (-f = follow)
-# Utile pour le débogage immédiat sans entrer dans les conteneurs
-logs:
-	$(DOCKER_CMD) logs -f
+# ==============================================================================
+# OUTILS DE DÉBOGAGE & LOGS
+# ==============================================================================
 
-# Nettoyage COMPLET de l'environnement (Hard Reset)
-# ⚠️ ATTENTION : Cette commande est destructive !
-# -v								: Supprime les VOLUMES (bases de données, logs persistants, etc.)
-# --rmi all					: Supprime toutes les images associées au service
-# --remove-orphans	: Nettoie les conteneurs "orphelins" non définis dans le YAML actuel
+# Affiche les logs en temps réel (-f = follow).
+# ------------------------------------------------------------------------------
+# USAGE :
+#   1. Tous les services : make logs
+#   2. Un seul service   : make logs s=vault
+#                          make logs s=rabbitmq
+# ------------------------------------------------------------------------------
+logs:
+	@echo "Affichage des logs $(if $(s),pour le service: $(s),global)..."
+	$(DOCKER_CMD) logs -f $(s)
+
+# Affiche l'état des conteneurs (UP/DOWN, Ports, Healthcheck)
+ps:
+	@echo "État des services :"
+	$(DOCKER_CMD) ps
+
+# ==============================================================================
+# NETTOYAGE & MAINTENANCE
+# ==============================================================================
+
+# Nettoyage COMPLET de l'environnement (Hard Reset).
+# ⚠️  ATTENTION : DESTRUCTIF !
+# - Supprime les conteneurs arrêtés.
+# -v                : Supprime les VOLUMES (Base de données, Secrets Vault, etc.)
+# --rmi all         : Supprime toutes les images associées.
+# --remove-orphans  : Nettoie les conteneurs "fantômes" non définis dans le YAML.
 clean:
-	@echo "Nettoyage complet (conteneurs, volumes, images)..."
+	@echo "🧹 Nettoyage complet (conteneurs, volumes, images, réseaux)..."
+	@echo "⚠️  Toutes les données persistantes (DB, Vault) seront perdues."
 	$(DOCKER_CMD) down -v --rmi all --remove-orphans
 
-# Redémarrage complet (Stop + Clean + Start) pour repartir sur une base saine
+# Redémarrage complet pour repartir sur une base saine (Fresh Start)
 re: clean up
 
 # Indique que ces règles ne correspondent pas à des fichiers physiques
-.PHONY: all up down logs clean re
+.PHONY: all up down logs ps clean re
