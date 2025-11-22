@@ -1,16 +1,24 @@
+# ==============================================================================
+# DOCKER COMPOSE - INFRASTRUCTURE FT_TRANSCENDENCE
+# ==============================================================================
+# Ce fichier orchestre les services d'infrastructure (Backing Services).
+# Il ne contient PAS le code applicatif (Frontend/Backend), mais fournit
+# les briques de base : Sécurité (Vault), Messagerie (RabbitMQ) et Ingress (Nginx).
+# ==============================================================================
+
 services:
   # ==============================================================================
   # SERVICE: HASHICORP VAULT
   # Module: Cybersecurity (Gestion des secrets & PKI)
-  # Description: Serveur de gestion de secrets lancé en mode développement.
+  # Rôle : Gestionnaire de secrets & Autorité de Certification (PKI) interne.
   # ==============================================================================
   vault:
-    # Utilisation d'une version spécifique (1.13.3) pour assurer la stabilité et
-    # éviter les surprises (breaking changes) liées au tag 'latest'.
+    # Utilisation d'une version épinglée (pinned version) pour la stabilité.
     image: hashicorp/vault:1.13.3
     container_name: vault
 
-    # Exposition du port 8200 pour l'accès API et l'interface web (UI) depuis l'hôte
+    # Exposition des ports :
+    # 8200 : API Vault et Interface Web (UI)
     ports:
       - "8200:8200"
 
@@ -19,122 +27,168 @@ services:
       # --------------------------------------------------------------------------
       # CONFIGURATION DE DÉVELOPPEMENT
       # --------------------------------------------------------------------------
-      # Injection du token "Root" depuis le fichier .env.
-      # Permet de respecter la consigne de ne pas commiter de secrets.
-      # [Ref Subject: IV.4 Security concerns - "Publicly stored credentials..."]
+      # --- MODE DÉVELOPPEMENT ---
+      # Injection du Root Token depuis le .env (non commité).
+      # Permet l'automatisation via 'vault-init' sans intervention humaine.
       - VAULT_DEV_ROOT_TOKEN_ID=${VAULT_ROOT_TOKEN}
       
-      # Configuration réseau : écoute sur 0.0.0.0 pour être accessible
-      # par les autres conteneurs du réseau Docker.
+      # Écoute sur toutes les interfaces (0.0.0.0) pour être accessible par
+      # les autres conteneurs du réseau Docker.
       - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
       
-      # Adresse explicite pour l'API interne (client CLI local).
+      # Adresse publique annoncée pour l'API (interne au cluster)
       - VAULT_API_ADDR=http://127.0.0.1:8200
     
-    # --------------------------------------------------------------------------
-    # SÉCURITÉ SYSTÈME
-    # --------------------------------------------------------------------------
-    # IPC_LOCK : Permet au processus de verrouiller la mémoire vive (mloc).
-    # Empêche le système d'écrire des secrets sensibles (stockés en RAM)
-    # sur le disque dur via le mécanisme de SWAP.
+    # --- SÉCURITÉ MÉMOIRE (SWAP) ---
+    # IPC_LOCK est crucial pour un coffre-fort de secrets.
+    # Il permet de verrouiller la mémoire vive (mlock) pour empêcher que les
+    # secrets déchiffrés en RAM ne soient écrits sur le disque dur (SWAP)
+    # si le serveur manque de mémoire.
     cap_add:
       - IPC_LOCK 
     
-    # --------------------------------------------------------------------------
-    # COMMANDE DE DÉMARRAGE
-    # --------------------------------------------------------------------------
-    # server -dev : Lance Vault en mode développement.
-    # - Stockage 100% en mémoire (inmem)
-    # - Auto-Unseal (déverrouillage automatique au démarrage)
-    # - UI activée par défaut
+    # Mode 'server -dev' :
+    # - Stockage 100% en RAM (pas de persistance sur disque).
+    # - Unseal automatique (pas besoin de clés de déverrouillage manuelles).
     command: server -dev
 
-  # ==============================================================================
-  # SERVICE: VAULT INIT (AUTOMATISATION)
-  # Description: Service éphémère. Génère les secrets/certs et s'arrête.
-  # ==============================================================================
+  # ============================================================================
+  # 2. INITIALISATION AUTOMATISÉE (Bootstrapper)
+  # Rôle : Service éphémère ("One-off").
+  # Description : 
+  #   Ce conteneur se lance, configure Vault, génère les certificats SSL/TLS,
+  #   crée les mots de passe aléatoires, les dépose dans les volumes partagés,
+  #   puis s'éteint immédiatement.
+  # ============================================================================
   vault-init:
     image: hashicorp/vault:1.13.3
     container_name: vault_init
+
+    # Pas de redémarrage automatique : une fois le travail fini, il doit rester éteint.
     restart: "no"
 
-    # On installe jq pour le parsing JSON dans le script, puis on lance l'init
+    # Script inline pour installer les dépendances (jq, openssl) à la volée
+    # et lancer le script d'init. Cela évite de devoir build une image custom.
     entrypoint: >
       /bin/sh -c "apk add --no-cache jq openssl && chmod +x /scripts/init_vault.sh && /scripts/init_vault.sh"
 
     environment:
-      # Token pour se connecter à Vault et le configurer
       - VAULT_ROOT_TOKEN=${VAULT_ROOT_TOKEN}
-      # Inputs non sensibles pour la génération des configs
+      # Variables nécessaires pour injecter les configs initiales dans Vault
       - RABBITMQ_USER=${RABBITMQ_USER}
       - POSTGRES_USER=${POSTGRES_USER}
       - NODE_ENV=${NODE_ENV}
 
     volumes:
-      # Montage du script d'initialisation (chemin relatif au docker-compose.yml)
+      # Injection du script Shell d'initialisation
       - ./vault/init_vault.sh:/scripts/init_vault.sh
-      # Volumes de sortie pour les certs et secrets
+      # Volumes de sortie (écriture) pour les artéfacts générés
       - certs_data:/shared/certs
       - secrets_data:/shared/secrets
 
+    # Attendre que Vault soit prêt à recevoir des commandes API
     depends_on:
       - vault
 
-  # ==============================================================================
-  # SERVICE: RABBITMQ
-  # Module: Devops (Microservices Communication)
-  # Description: Broker de messages pour la communication asynchrone.
-  # ==============================================================================
+  # ============================================================================
+  # 3. BROKER DE MESSAGES (RabbitMQ)
+  # Module: Devops / Microservices (V.7)
+  # Rôle : Bus d'événements asynchrone (Pub/Sub).
+  # ============================================================================
   rabbitmq:
-    # Utilisation de la version "management" pour avoir l'interface web incluse.
     image: rabbitmq:3.13-management
     container_name: rabbitmq
-
-    # Définition du hostname pour une résolution DNS interne stable
     hostname: rabbitmq
 
     ports:
-      - "5672:5672"   # Port standard AMQP (utilisé par les microservices)
-      - "15672:15672" # Interface de gestion Web (http://localhost:15672)
+      - "5672:5672"   # Protocole AMQP (Communication inter-services)
+      - "15672:15672" # Dashboard de management (http://localhost:15672)
 
     environment:
       # L'utilisateur est public (défini dans .env)
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
-      # On indique à RabbitMQ de lire le mot de passe dans un fichier
-      # situé sur le volume RAM (tmpfs). Pas de mot de passe en clair ici.
+      # SÉCURITÉ : On n'injecte PAS le mot de passe en variable d'environnement.
+      # On indique à RabbitMQ de lire le contenu du fichier situé dans le volume RAM.
+      # [Ref: Docker Secrets pattern]
       - RABBITMQ_DEFAULT_PASS=/shared/secrets/rabbitmq_password
 
     volumes:
-      # Persistance des données (files d'attente, messages non consommées)
+      # Persistance des données RabbitMQ (Queues, Messages durables)
       - rabbitmq_data:/var/lib/rabbitmq
       # Montage en lecture seule (:ro) des secrets générés par vault-init
       - secrets_data:/shared/secrets:ro
 
-    # Healthcheck : S'assure que le broker est prêt à accepter des connexions
-    # Indispensable pour que les microservices attendent avant de se connecter.
+    # HEALTHCHECK :
+    # Indispensable dans une architecture microservices.
+    # Les services Backend (NestJS) attendront que RabbitMQ soit "Healthy"
+    # avant de tenter de se connecter, évitant les crash loops au démarrage.
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-    # On attend que vault-init ait terminé (et donc créé le fichier de mot de passe)
+    # Dépendance forte : Le mot de passe doit exister avant le lancement.
     depends_on:
       vault-init:
         condition: service_completed_successfully
 
+  # ============================================================================
+  # 4. REVERSE PROXY & SSL (Nginx)
+  # Module: Cybersecurity (V.6) & Web (V.2)
+  # Rôle : Gateway d'entrée unique, terminaison SSL, routage.
+  # ============================================================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: nginx
+    restart: unless-stopped
+
+    ports:
+      # Mapping 1443 -> 443 pour éviter les conflits de ports priviligiés sur l'hôte
+      # ou si un autre serveur web tourne déjà sur le port 443 de la machine.
+      - "1443:443"  # Accès HTTPS : https://localhost:1443
+      - "8080:80"   # Accès HTTP (redirigé)
+
+    volumes:
+      # Configuration Nginx
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # Certificats SSL (montés en lecture seule)
+      - certs_data:/etc/nginx/certs:ro
+
+    # Nginx ne doit démarrer que lorsque les certificats SSL ont été générés
+    depends_on:
+      vault-init:
+        condition: service_completed_successfully
+
+    networks:
+      - transcendence-net
+
 # ==============================================================================
-# VOLUMES
+# DÉFINITION DES VOLUMES
 # ==============================================================================
 volumes:
+  # Données persistantes (Disque Dur)
   rabbitmq_data:
+
+  # Données partagées (Certificats)
   certs_data:
-  # Volume en MÉMOIRE VIVE (RAM)
-  # Les données écrites ici disparaissent à l'arrêt des conteneurs.
-  # Cela garantit qu'aucun mot de passe ne traîne sur le disque dur.
+  
+  # --- VOLUME RAM (TMPFS) ---
+  # Ce volume est stocké EXCLUSIVEMENT en Mémoire Vive.
+  # Les fichiers écrits ici (mots de passe DB, clés API) :
+  # 1. Ne sont jamais écrits sur le disque dur de l'hôte.
+  # 2. Sont perdus instantanément si les conteneurs s'arrêtent.
+  # C'est une mesure de sécurité "Zero Trust" pour le développement local.
   secrets_data:
     driver: local
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: "size=10m"
+      o: "size=10m" # Limite de taille pour éviter de saturer la RAM
+
+# ==============================================================================
+# RÉSEAUX
+# ==============================================================================
+networks:
+  transcendence-net:
+    driver: bridge
