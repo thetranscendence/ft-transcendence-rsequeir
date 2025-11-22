@@ -1,0 +1,16 @@
+{
+    "name": "ft-transcendence-monorepo",
+    "version": "0.0.1",
+    "private": true,
+    "scripts": {
+        "dev": "pnpm -r run dev",
+        "build": "pnpm - run build",
+        "test": "pnpm -r run test",
+        "clean": "rm -rf node_modules **/*/node_modules"
+    },
+    "engines": {
+        "node": ">=24.11.1",
+        "pnpm": ">=10.23.0"
+    },
+    "packageManager": "pnpm@10.23.0"
+}

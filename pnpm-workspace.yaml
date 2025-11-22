@@ -1,0 +1,35 @@
+# ==============================================================================
+# CONFIGURATION WORKSPACE PNPM (MONOREPO)
+# ==============================================================================
+# Ce fichier définit la racine du monorepo et indique à pnpm où trouver
+# les différents projets et librairies.
+#
+# PRINCIPE :
+# pnpm va scanner ces dossiers pour trouver des fichiers 'package.json'.
+# Il créera ensuite des liens symboliques (symlinks) pour que les 'apps'
+# puissent importer les 'packages' locaux comme s'ils venaient de npm.
+# ==============================================================================
+
+packages:
+  # ----------------------------------------------------------------------------
+  # 1. APPLICATIONS EXÉCUTABLES (APPS)
+  # ----------------------------------------------------------------------------
+  #
+  # Exemples :
+  # - apps/backend-gateway  (API Gateway Fastify)
+  # - apps/frontend         (SPA React/Vue/Svelte)
+  # - apps/micro-auth       (Service d'authentification)
+  - 'apps/*'
+
+  # ----------------------------------------------------------------------------
+  # 2. BIBLIOTHÈQUES PARTAGÉES (PACKAGES)
+  # ----------------------------------------------------------------------------
+  # Contient le code réutilisable, sans état, importé par les applications.
+  # Ces modules ne tournent pas seuls.
+  #
+  # Exemples :
+  # - packages/tsconfig     (Configurations TypeScript communes)
+  # - packages/dtos         (Data Transfer Objects partagés Front/Back)
+  # - packages/types        (Interfaces TypeScript partagées)
+  # - packages/logger       (Utilitaire de logs standardisé)
+  - 'packages/*'

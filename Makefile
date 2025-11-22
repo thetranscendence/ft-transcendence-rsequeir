@@ -49,6 +49,18 @@ down:
 # Utile pour remettre l'environnement à zéro et appliquer des changements majeurs.
 re: clean up
 
+# Configuration de l'environnement de développement (DX)
+# ------------------------------------------------------------------------------
+# Cette commande prépare votre machine HÔTE pour le codage (VSCode, ESLint...).
+# Elle installe Node.js, pnpm et les dépendances via un script dédié.
+#
+# NOTE :
+# Cette étape est OPTIONNELLE. L'évaluation doit se faire via 'make up' (Docker).
+# Ce setup sert uniquement à éviter les erreurs dans l'IDE du développeur.
+# ------------------------------------------------------------------------------
+dev-setup:
+	@./scripts/dev_setup.sh
+
 # ==============================================================================
 # OUTILS DE DÉBOGAGE & MAINTENANCE
 # ==============================================================================
