@@ -22,7 +22,6 @@ services:
     ports:
       - "8200:8200"
 
-    
     environment:
       # --------------------------------------------------------------------------
       # CONFIGURATION DE DÉVELOPPEMENT
@@ -162,6 +161,44 @@ services:
 
     networks:
       - transcendence-net
+
+  # ============================================================================
+  # 5. API GATEWAY (Backend Principal)
+  # Module: Web (V.2)
+  # Rôle : Point d'entrée API, Validation, Auth & Proxy vers microservices.
+  # ============================================================================
+  gateway:
+    container_name: gateway
+    build:
+      # Le contexte est la racine du projet pour accéder au workspace pnpm
+      context: ..
+      dockerfile: apps/backend-gateway/Dockerfile
+
+    restart: unless-stopped
+
+    # Montage des volumes pour le Hot-Reload
+    # On monte le code source local par-dessus celui du conteneur
+    volumes:
+      - ../apps/backend-gateway/src:/usr/src/app/backend-gateway/src
+      # On exclut node_modules pour utiliser ceux du conteneur et pas ceux de l'hôte.
+      - /usr/src/app/apps/backend-gateway/node_modules
+
+    environment:
+      - NODE_ENV=${NODE_ENV}
+      # Secrets chargés (plus tard via Vault, pour l'instant via env ou défaut)
+      - API_PORT=3000
+
+    ports:
+      - "3000:3000" # Accès direct pour le débuggage (optionnel, Nginx expose le 443)
+
+    networks:
+      - transcendence-net
+
+    depends_on:
+      vault-init:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
 
 # ==============================================================================
 # DÉFINITION DES VOLUMES

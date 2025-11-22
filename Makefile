@@ -73,7 +73,6 @@ dev-setup:
 #   make logs s=vault    -> Logs du service 'vault' uniquement
 # ------------------------------------------------------------------------------
 logs:
-logs:
 	@echo "Affichage des logs $(if $(s),pour le service: $(s),global)..."
 	$(DOCKER_CMD) logs -f $(s)
 
