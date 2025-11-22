@@ -1,0 +1,8 @@
+Utilise :
+
+- reflect-metadata
+
+
+---
+
+Modifie mon code ma /lib/decorators pour que le DI fonctionne donc fait les routes (@Get, @Post...), @Inject, @Controller, @Service, import pas de lib externe!

@@ -1,0 +1,31 @@
+{
+	"name": "my-fastify-decorators",
+	"version": "0.1.0",
+	"description": "Lightweight TypeScript decorators for Fastify v5",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"types": "dist/index.d.ts",
+	"main": "dist/index.js",
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"prebuild": "pnpm install",
+		"build": "tsc -p tsconfig.json"
+	},
+	"peerDependencies": {
+		"fastify": "^5.0.0",
+		"reflect-metadata": "^0.2.0"
+	},
+	"devDependencies": {
+		"@types/node": "^24.5.2",
+		"socket.io": "^4.8.1",
+		"typescript": "^5.9.2"
+	},
+	"license": "MIT"
+}
