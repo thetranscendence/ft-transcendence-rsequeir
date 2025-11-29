@@ -22,6 +22,9 @@ services:
     ports:
       - "8200:8200"
 
+    volumes:
+      - secrets_data:/shared/secrets
+
     environment:
       # --------------------------------------------------------------------------
       # CONFIGURATION DE DÉVELOPPEMENT
@@ -106,16 +109,16 @@ services:
     environment:
       # L'utilisateur est public (défini dans .env)
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
-      # SÉCURITÉ : On n'injecte PAS le mot de passe en variable d'environnement.
-      # On indique à RabbitMQ de lire le contenu du fichier situé dans le volume RAM.
-      # [Ref: Docker Secrets pattern]
-      - RABBITMQ_DEFAULT_PASS=/shared/secrets/rabbitmq_password
-
+      
     volumes:
       # Persistance des données RabbitMQ (Queues, Messages durables)
       - rabbitmq_data:/var/lib/rabbitmq
       # Montage en lecture seule (:ro) des secrets générés par vault-init
       - secrets_data:/shared/secrets:ro
+      - ./rabbitmq/rabbitmq_entrypoint.sh:/usr/local/bin/rabbitmq_entrypoint.sh:ro
+
+    # AJOUT : Définition de l'entrypoint personnalisé
+    entrypoint: ["/bin/bash", "/usr/local/bin/rabbitmq_entrypoint.sh"]
 
     # HEALTHCHECK :
     # Indispensable dans une architecture microservices.
@@ -133,7 +136,101 @@ services:
         condition: service_completed_successfully
 
   # ============================================================================
-  # 4. REVERSE PROXY & SSL (Nginx)
+  # 4. ELASTICSEARCH (Moteur de recherche & Stockage logs)
+  # Module: Devops (V.7)
+  # ============================================================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
+    container_name: elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      # Limite mémoire stricte pour éviter de saturer l'hôte (Java Heap)
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+      - secrets_data:/shared/secrets:ro
+      - ./elasticsearch/es_entrypoint.sh:/usr/local/bin/es_entrypoint.sh:ro
+
+    entrypoint: ["/bin/bash", "/usr/local/bin/es_entrypoint.sh"]
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -f -u elastic:$(cat /shared/secrets/elastic_password) http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20  # Elasticsearch peut être lent à démarrer (Java)
+
+    depends_on:
+      vault-init:
+        condition: service_completed_successfully
+
+    networks:
+      - transcendence-net
+
+  # ============================================================================
+  # 5. LOGSTASH (Ingestion Pipeline)
+  # Module: Devops (V.7)
+  # ============================================================================
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.1
+    container_name: logstash
+    restart: unless-stopped
+    volumes:
+      - ./logstash/pipeline/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+      - secrets_data:/shared/secrets:ro
+      - ./logstash/logstash_entrypoint.sh:/usr/local/bin/ls_entrypoint.sh:ro
+    ports:
+      - "5000:5000"
+    environment:
+      - LS_JAVA_OPTS=-Xmx256m -Xms256m
+      - XPACK_MONITORING_ENABLED=false
+
+    entrypoint: ["/bin/bash", "/usr/local/bin/ls_entrypoint.sh"]
+
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    
+    networks:
+      - transcendence-net
+
+  # ============================================================================
+  # 6. KIBANA (Visualisation)
+  # Module: Devops (V.7)
+  # ============================================================================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.1
+    container_name: kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    volumes:
+      - secrets_data:/shared/secrets:ro
+      - ./kibana/kibana_entrypoint.sh:/usr/local/bin/kb_entrypoint.sh:ro
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      # Désactive l'ancien système de droits pour le reporting (déprécié)
+      - XPACK_REPORTING_ROLES_ENABLED=false
+      # Fixe le hostname interne pour éviter l'auto-détection sur 0.0.0.0
+      - XPACK_REPORTING_KIBANASERVER_HOSTNAME=localhost
+      # Autorise les cookies sur HTTP (puisque SSL est géré par Nginx en amont)
+      - XPACK_SECURITY_SECURECOOKIES=false
+    
+    entrypoint: ["/bin/bash", "/usr/local/bin/kb_entrypoint.sh"]
+
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+    networks:
+      - transcendence-net
+
+  # ============================================================================
+  # 7. REVERSE PROXY & SSL (Nginx)
   # Module: Cybersecurity (V.6) & Web (V.2)
   # Rôle : Gateway d'entrée unique, terminaison SSL, routage.
   # ============================================================================
@@ -163,7 +260,7 @@ services:
       - transcendence-net
 
   # ============================================================================
-  # 5. API GATEWAY (Backend Principal)
+  # 8. API GATEWAY (Backend Principal)
   # Module: Web (V.2)
   # Rôle : Point d'entrée API, Validation, Auth & Proxy vers microservices.
   # ============================================================================
@@ -209,6 +306,9 @@ volumes:
 
   # Données partagées (Certificats)
   certs_data:
+
+  # Volume de persistance pour les logs Elasticsearch
+  elastic_data:
   
   # --- VOLUME RAM (TMPFS) ---
   # Ce volume est stocké EXCLUSIVEMENT en Mémoire Vive.

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: global-config
+data:
+  # On pourra y mettre des variables non-sensibles partagées
+  PROJECT_NAME: "ft_transcendence"

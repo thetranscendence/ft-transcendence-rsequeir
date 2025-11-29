@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  labels:
+    app: gateway
+spec:
+  # Expose le service à l'intérieur du cluster
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  selector:
+    app: gateway
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+  labels:
+    app: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+      annotations:
+        # ======================================================================
+        # CONFIGURATION DE L'INJECTION VAULT (Zero Trust)
+        # ======================================================================
+        # 1. Active l'injection du sidecar Vault Agent dans ce Pod
+        vault.hashicorp.com/agent-inject: "true"
+        
+        # 2. Spécifie le rôle (doit correspondre à celui configuré dans Vault)
+        vault.hashicorp.com/role: "backend-gateway-role"
+        
+        # 3. Définit quel secret récupérer (Chemin KV v2)
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/app/common"
+        
+        # 4. Formate le fichier de sortie (.env)
+        # Ce template écrit un fichier que l'application pourra "sourcer"
+        vault.hashicorp.com/agent-inject-template-config: |
+          {{- with secret "secret/data/app/common" -}}
+            export JWT_SECRET="{{ .Data.data.jwt_secret }}"
+            export NODE_ENV="{{ .Data.data.node_env }}"
+            export API_PORT=3000
+          {{- end -}}
+    spec:
+      # Compte de service associé (nécessaire pour l'auth Vault/K8s)
+      serviceAccountName: default 
+      containers:
+        - name: gateway
+          # Assurez-vous que cette image correspond à celle construite par votre Makefile
+          image: gateway:latest
+          imagePullPolicy: Never # Utilise l'image locale importée dans K3s
+          
+          # SÉCURITÉ : On ne passe plus de secrets en variables d'env ici !
+          # On source le fichier généré par Vault avant de lancer l'app.
+          command: ["/bin/sh", "-c"]
+          args: ["source /vault/secrets/config && node dist/main.js"]
+          
+          ports:
+            - containerPort: 3000
+          
+          # Healthcheck (Liveness Probe)
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10

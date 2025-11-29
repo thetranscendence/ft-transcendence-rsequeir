@@ -59,6 +59,10 @@ echo "[Vault-Init] Génération des identifiants d'infrastructure..."
 RABBITMQ_PASS=$(generate_password)
 POSTGRES_PASS=$(generate_password)
 JWT_SECRET=$(generate_password)
+ELASTIC_PASS=$(generate_password)
+KIBANA_SYSTEM_PASS=$(generate_password)
+# La clé de chiffrement doit faire 32 caractères min pour Kibana
+KIBANA_ENC_KEY=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 32) # Pour sécuriser les Saved Objects (xpack)
 
 # Préparation du dossier de sortie
 mkdir -p ${SECRETS_DIR}
@@ -70,10 +74,12 @@ mkdir -p ${SECRETS_DIR}
 # à l'extinction du conteneur.
 echo -n "${RABBITMQ_PASS}" > ${SECRETS_DIR}/rabbitmq_password
 echo -n "${POSTGRES_PASS}" > ${SECRETS_DIR}/postgres_password
+echo -n "${ELASTIC_PASS}" > ${SECRETS_DIR}/elastic_password
+echo -n "${KIBANA_SYSTEM_PASS}" > ${SECRETS_DIR}/kibana_system_password
+echo -n "${KIBANA_ENC_KEY}" > ${SECRETS_DIR}/kibana_encryption_key
 
-# Restriction des droits (Lecture seule pour le propriétaire uniquement)
-# Empêche tout autre utilisateur du conteneur de lire ces secrets.
-chmod 600 ${SECRETS_DIR}/*_password
+# Restriction des droits
+chmod 644 ${SECRETS_DIR}/*
 
 echo "[Vault-Init] Secrets écrits en RAM dans ${SECRETS_DIR}"
 
@@ -151,6 +157,14 @@ vault kv put secret/infra/postgres \
   password="${POSTGRES_PASS}" \
   db_name="transcendence"
 
+vault kv put secret/infra/elastic \
+  username="elastic" \
+  password="${ELASTIC_PASS}"
+
+vault kv put secret/infra/kibana \
+  encryption_key="${KIBANA_ENC_KEY}" \
+  system_password="${KIBANA_SYSTEM_PASS}"
+
 # Secrets Applicatifs (Configuration globale partagée)
 vault kv put secret/app/common \
   node_env="${NODE_ENV}" \
@@ -185,15 +199,18 @@ echo "[Transit] Clé de chiffrement 'transcendence-pii-key' opérationnelle."
 # manuellement aux services (PgAdmin, RabbitMQ Management, etc.)
 # ==============================================================================
 echo "----------------------------------------------------------------"
-echo "🎉 INITIALISATION TERMINÉE AVEC SUCCÈS"
+echo "  INITIALISATION TERMINÉE AVEC SUCCÈS"
 echo "----------------------------------------------------------------"
-echo "🔐 RabbitMQ User : ${RABBITMQ_USER}"
-echo "🔐 RabbitMQ Pass : ${RABBITMQ_PASS}"
+echo "  RabbitMQ User : ${RABBITMQ_USER}"
+echo "  RabbitMQ Pass : ${RABBITMQ_PASS}"
 echo "----------------------------------------------------------------"
-echo "🔐 Postgres User : ${POSTGRES_USER}"
-echo "🔐 Postgres Pass : ${POSTGRES_PASS}"
+echo "  Postgres User : ${POSTGRES_USER}"
+echo "  Postgres Pass : ${POSTGRES_PASS}"
 echo "----------------------------------------------------------------"
-echo "⚠️  NOTE IMPORTANTE :"
+echo "  Elastic User  : elastic"
+echo "  Elastic Pass  : ${ELASTIC_PASS}"
+echo "----------------------------------------------------------------"
+echo "   NOTE IMPORTANTE :"
 echo "   Ces mots de passe sont dynamiques et changent à chaque"
 echo "   redémarrage complet (docker compose down -v)."
 echo "   Ils sont stockés de manière sécurisée dans Vault."
