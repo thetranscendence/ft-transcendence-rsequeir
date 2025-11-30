@@ -7,8 +7,8 @@ metadata:
 spec:
   # Expose le service à l'intérieur du cluster
   ports:
-    - port: 3000
-      targetPort: 3000
+    - port: 42300 # default port: 3000
+      targetPort: 42300
       name: http
   selector:
     app: gateway
@@ -36,7 +36,7 @@ spec:
         vault.hashicorp.com/agent-inject: "true"
         
         # 2. Spécifie le rôle (doit correspondre à celui configuré dans Vault)
-        vault.hashicorp.com/role: "backend-gateway-role"
+        vault.hashicorp.com/role: "gateway-role"
         
         # 3. Définit quel secret récupérer (Chemin KV v2)
         vault.hashicorp.com/agent-inject-secret-config: "secret/data/app/common"
@@ -47,7 +47,7 @@ spec:
           {{- with secret "secret/data/app/common" -}}
             export JWT_SECRET="{{ .Data.data.jwt_secret }}"
             export NODE_ENV="{{ .Data.data.node_env }}"
-            export API_PORT=3000
+            export API_PORT={{ .Data.data.api_port }}
           {{- end -}}
     spec:
       # Compte de service associé (nécessaire pour l'auth Vault/K8s)
@@ -64,12 +64,12 @@ spec:
           args: ["source /vault/secrets/config && node dist/main.js"]
           
           ports:
-            - containerPort: 3000
+            - containerPort: 42300
           
           # Healthcheck (Liveness Probe)
           livenessProbe:
             httpGet:
               path: /api/health
-              port: 3000
+              port: 42300
             initialDelaySeconds: 5
             periodSeconds: 10

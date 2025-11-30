@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kibana
+spec:
+  ports:
+    - port: 42560 # default port: 5601
+  selector:
+    app: kibana
+---
+apiVersion: v1
+kind: Deployment
+metadata:
+  name: kibana
+spec:
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "kibana-role"
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/infra/kibana"
+        # On récupère aussi le mdp elasticsearch (dans un autre secret)
+        vault.hashicorp.com/agent-inject-secret-es-creds: "secret/data/infra/elastic"
+        vault.hashicorp.com/agent-inject-template-config: |
+          {{- with secret "secret/data/infra/kibana" -}}
+            export XPACK_SECURITY_ENCRYPTIONKEY="{{ .Data.data.encryption_key }}"
+            export XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY="{{ .Data.data.encryption_key }}"
+            export XPACK_REPORTING_ENCRYPTIONKEY="{{ .Data.data.encryption_key }}"
+          {{- end -}}
+        vault.hashicorp.com/agent-inject-template-es-creds: |
+          {{- with secret "secret/data/infra/elastic" -}}
+            export ELASTICSEARCH_PASSWORD="{{ .Data.data.password }}"
+          {{- end -}}
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: kibana
+          image: docker.elastic.co/kibana/kibana:8.11.1
+          env:
+            - name: ELASTICSEARCH_HOST
+              valut: "http://elasticsearch:42920"
+            - name: ELASTICSEARCH_USERNAME
+              value: "elastic" # Simplification pour le dev : on utilise elastic directement
+          command: ["/bin/sh", "-c"]
+          args: ["source /vault/secrets/config && source /vault/secrets/es-creds && /usr/local/bin/kibana-docker"]
+          ports:
+            containerPort: 42560
