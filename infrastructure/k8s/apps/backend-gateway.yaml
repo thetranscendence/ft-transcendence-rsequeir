@@ -8,7 +8,7 @@ spec:
   # Expose le service à l'intérieur du cluster
   ports:
     - port: 42300 # default port: 3000
-      targetPort: 42300
+      targetPort: 3000
       name: http
   selector:
     app: gateway
@@ -51,7 +51,7 @@ spec:
           {{- end -}}
     spec:
       # Compte de service associé (nécessaire pour l'auth Vault/K8s)
-      serviceAccountName: default 
+      serviceAccountName: gateway 
       containers:
         - name: gateway
           # Assurez-vous que cette image correspond à celle construite par votre Makefile
@@ -61,15 +61,15 @@ spec:
           # SÉCURITÉ : On ne passe plus de secrets en variables d'env ici !
           # On source le fichier généré par Vault avant de lancer l'app.
           command: ["/bin/sh", "-c"]
-          args: ["source /vault/secrets/config && node dist/main.js"]
+          args: [". /vault/secrets/config && node apps/backend-gateway/dist/main.js"]
           
           ports:
-            - containerPort: 42300
+            - containerPort: 3000
           
           # Healthcheck (Liveness Probe)
           livenessProbe:
             httpGet:
               path: /api/health
-              port: 42300
+              port: 3000
             initialDelaySeconds: 5
             periodSeconds: 10

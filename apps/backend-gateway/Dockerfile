@@ -42,8 +42,10 @@ COPY apps/backend-gateway ./apps/backend-gateway
 # Le gateway a besoin que la lib soit transpilée (création du dossier dist/)
 RUN pnpm --filter my-fastify-decorators run build
 
+RUN pnpm --filter backend-gateway run build
+
 # Exposition et Démarrage
 EXPOSE 3000
 
 # En mode dev, on utilise ts-node-dev (défini dans le package.json du gateway)
-CMD ["pnpm", "--filter", "backend-gateway", "run", "dev"]
+CMD ["node", "apps/backend-gateway/dist/main.js"]

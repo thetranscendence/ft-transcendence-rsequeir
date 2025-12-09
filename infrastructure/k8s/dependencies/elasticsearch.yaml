@@ -5,11 +5,12 @@ metadata:
 spec:
   ports:
     - port: 42920 # default port: 9200
+      targetPort: 9200
       name: http
   selector:
     app: elasticsearch
 ---
-apiVersion: v1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: elasticsearch
@@ -30,10 +31,10 @@ spec:
             export ELASTIC_PASSWORD="{{ .Data.data.password }}"
           {{- end -}}
     spec:
-      serviceAccountName: default
+      serviceAccountName: elasticsearch
       containers:
         - name: elasticsearch
-          image: docker.elastic.co/elastic/elasticsearch:8.11.1
+          image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
           env:
             - name: discovery.type
               value: "single-node"
@@ -42,6 +43,6 @@ spec:
             - name: ES_JAVA_OPTS
               value: "-Xms512m -Xmx512m"
           command: ["/bin/sh", "-c"]
-          args: ["source /vault/secrets/config && /usr/local/bin/docker-entrypoint.sh eswrapper"]
+          args: [". /vault/secrets/config && /usr/local/bin/docker-entrypoint.sh eswrapper"]
           ports:
-            - containerPort: 42920
+            - containerPort: 9200

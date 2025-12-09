@@ -7,6 +7,7 @@ metadata:
 spec:
   ports:
     - port: 42500 #default port: 5000
+      targetPort: 5000
       name: tcp-input
   selector:
     app: logstash
@@ -33,12 +34,12 @@ spec:
             export ELASTIC_PASSWORD="{{ .Data.data.password }}"
           {{- end -}}
     spec:
-      serviceAccountName: default
+      serviceAccountName: logstash
       containers:
         - name: logstash
           image: docker.elastic.co/logstash/logstash:8.11.1
           ports:
-            - containerPort: 42500
+            - containerPort: 5000
           env:
             - name: XPACK_MONITORING_ENABLED
               value: "false"
@@ -50,8 +51,8 @@ spec:
               subPath: logstash.conf
           
           command: ["/bin/sh", "-c"]
-          args: ["source /vault/secrets/config && /usr/local/bin/docker-entrypoint"]
-      
+          args: [". /vault/secrets/config && /usr/local/bin/docker-entrypoint"]
+
       volumes:
         - name: config-volume
           configMap:

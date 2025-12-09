@@ -17,19 +17,18 @@ echo "Configuration de Vault pour Kubernetes..."
 echo "   -> En attente du pod vault-0..."
 kubectl wait --for=condition=Ready pod/vault-0 --timeout=60s
 
-echo "VAULT_TOKEN=${VAULT_ROOT_TOKEN}"
-
 # 2. Activation de l'auth Kubernetes
 # On utilise le Token Root injecté via Helm pour effectuer ces opérations administratives
 kubectl exec vault-0 -- /bin/sh -c "VAULT_TOKEN=${VAULT_ROOT_TOKEN} vault auth enable kubernetes"
 
 # 3. Configuration du lien Vault <-> API Kubernetes
-# Vault utilise le ServiceAccount local (monté dans le pod) pour parler à l'API K8s
+# On configure Vault pour qu'il utilise le token et le CA du compte de service local
+# Note: On laisse Vault lire lui-même les fichiers locaux via les chemins standards
 kubectl exec vault-0 -- /bin/sh -c "VAULT_TOKEN=${VAULT_ROOT_TOKEN} vault write auth/kubernetes/config \
-    kubernetes_host='https://\$KUBERNETES_PORT_443_TCP_ADDR:443' \
-    token_reviewer_jwt='\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)' \
-    kubernetes_ca_cert='\$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)' \
-    issuer='https://kubernetes.default.svc.cluster.local'"
+    kubernetes_host='https://kubernetes.default.svc:443' \
+    disable_iss_validation=true \
+    kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt \
+    token_reviewer_jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token"
 
 echo "🔧 Création des Politiques (Policies) granulaires..."
 
@@ -77,19 +76,21 @@ echo "🔧 Création des Rôles Kubernetes..."
 create_role() {
     local role_name=$1
     local policy_name=$2
-    echo "   -> Role: $role_name"
+    local sa_name=$3
+    echo "   -> Role: $role_name (SA: $sa_name)"
+
     kubectl exec vault-0 -- /bin/sh -c "VAULT_TOKEN=${VAULT_ROOT_TOKEN} vault write auth/kubernetes/role/$role_name \
-        bound_service_account_names=default \
+        bound_service_account_names=$sa_name \
         bound_service_account_namespaces=default \
         policies=$policy_name \
         ttl=24h"
 }
 
-create_role "rabbitmq-role" "rabbitmq-policy"
-create_role "elastic-role" "elastic-policy"
-create_role "kibana-role" "kibana-policy"
-create_role "logstash-role" "logstash-policy"
-create_role "gateway-role" "gateway-policy"
+create_role "rabbitmq-role" "rabbitmq-policy" "rabbitmq"
+create_role "elastic-role" "elastic-policy" "elasticsearch"
+create_role "kibana-role" "kibana-policy" "kibana"
+create_role "logstash-role" "logstash-policy" "logstash"
+create_role "gateway-role" "gateway-policy" "gateway"
 
 # ==============================================================================
 # 6. GÉNÉRATION ET INJECTION DES SECRETS (ZERO TRUST)
@@ -100,6 +101,7 @@ echo "Génération et injection des secrets dynamiques..."
 RABBITMQ_PASS=$(generate_key_32)
 ELASTIC_PASS=$(generate_key_32)
 KIBANA_ENC_KEY=$(generate_key_32)
+KIBANA_SYSTEM_PASS=$(generate_key_32)
 JWT_SECRET=$(generate_key_32)
 
 echo "Injection des secrets d'infrastructure dans Vault..."
@@ -114,12 +116,14 @@ kubectl exec vault-0 -- vault kv put secret/infra/elastic \
 
 # Injection Kibana
 kubectl exec vault-0 -- vault kv put secret/infra/kibana \
-    encryption_key="${KIBANA_ENC_KEY}"
+    encryption_key="${KIBANA_ENC_KEY}" \
+    password="${KIBANA_SYSTEM_PASS}"
 
 # Injection App Common (Exemple)
 kubectl exec vault-0 -- vault kv put secret/app/common \
     jwt_secret="${JWT_SECRET}" \
-    node_env="${NODE_ENV}"
+    node_env="${NODE_ENV}" \
+    api_port="${API_PORT}"
 
 echo "Vault est configuré. Les secrets ont été générés aléatoirement."
 echo "   -> Pour voir les secrets générés (Debug): kubectl exec vault-0 -- sh -c 'VAULT_TOKEN=${VAULT_ROOT_TOKEN} vault kv get secret/infra/rabbitmq'"
