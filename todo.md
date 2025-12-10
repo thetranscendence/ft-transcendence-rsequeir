@@ -1,0 +1,5 @@
+- Supprimer l'accès aux secrets elastic dans la policy kibana et configurer les comptes systèmes au démarrage du service elastic.
+- Idem pour la policy logstash : créer un user pour le service logstash afin d'éviter de donner l'accès au mot de passe de l'utilisateur 'elastic'.
+- Confirmer si l'injection des secrets applicatifs dans un fichier `/vault/secrets/config` est sécurisée ou s'il y a d'autres méthodes plus sécurisées.
+- Les données du Vault sont actuellement stockées dans la RAM du pod, nous empêchant de l'éteindre lors de l'exécution de la commande `make down`. Nous devons passer à un stockage disque afin de pouvoir arrêter le service proprement lors de l'exécution de la commande `make down`. Cela nécessite de gérer le déverrouillage/unseal manuellement.
+- Mettre à jour l'ingress pour respecter les exigences de sécurité liées aux communications sécurisées (HTTPS/WSS).
