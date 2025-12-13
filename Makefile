@@ -120,13 +120,15 @@ deploy-services:
 	@$(KUBECTL) create configmap es-init-scripts \
 		--from-file=init_users.sh=./infrastructure/elasticsearch/scripts/init_es_users.sh \
 		--from-file=logger.sh=./scripts/logger.sh \
-		--dry-run=client -o yaml | $(KUBECTL) apply -f - > /dev/null
+		--dry-run=client -o yaml | \
+		$(KUBECTL) apply -f - > /dev/null
 
 	@$(LOG_INFO) "Configuration du pipeline Logstash..."
 	@$(KUBECTL) create configmap logstash-config \
 		--from-file=logstash.conf=./infrastructure/logstash/pipeline/logstash.conf \
-		--dry-run=client -o yaml | $(KUBECTL) apply -f - > /dev/null
-	
+		--dry-run=client -o yaml | \
+		$(KUBECTL) apply -f - > /dev/null
+
 	@$(LOG_INFO) "Déploiement des StatefulSets (Elastic, RabbitMQ, etc.)..."
 	@$(KUBECTL) apply -f $(K8S_DIR)/dependencies/ > /dev/null
 	
