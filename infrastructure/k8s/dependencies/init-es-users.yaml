@@ -35,14 +35,14 @@ spec:
         vault.hashicorp.com/agent-inject-secret-elastic: "secret/data/infra/elastic"
         vault.hashicorp.com/agent-inject-template-elastic: |
           {{- with secret "secret/data/infra/elastic" -}}
-            export ELASTIC_PASSWORD="{{ .Data.data.password }}"
+            export ELASTIC_PASSWORD={{ .Data.data.password | toJSON }}
           {{- end -}}
 
         # --- SECRET 2 : Identifiants Kibana System (Cible) ---
         vault.hashicorp.com/agent-inject-secret-kibana: "secret/data/infra/kibana"
         vault.hashicorp.com/agent-inject-template-kibana: |
           {{- with secret "secret/data/infra/kibana" -}}
-            export KIBANA_SYSTEM_PASSWORD="{{ .Data.data.password }}"
+            export KIBANA_SYSTEM_PASSWORD={{ .Data.data.password | toJSON }}
           {{- end -}}
 
         # --- SECRET 3 : Identifiants Logstash Writer (Cible) ---
@@ -50,8 +50,8 @@ spec:
         vault.hashicorp.com/agent-inject-template-logstash: |
           {{- with secret "secret/data/infra/logstash" -}}
             # On récupère le nom d'utilisateur dynamique stocké dans Vault
-            export LOGSTASH_USER="{{ .Data.data.username }}"
-            export LOGSTASH_PASSWORD="{{ .Data.data.password }}"
+            export LOGSTASH_USER={{ .Data.data.username | toJSON }}
+            export LOGSTASH_PASSWORD={{ .Data.data.password | toJSON }}
           {{- end -}}
 
     spec:

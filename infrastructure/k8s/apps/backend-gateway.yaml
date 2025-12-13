@@ -45,9 +45,9 @@ spec:
         # Ce template écrit un fichier que l'application pourra "sourcer"
         vault.hashicorp.com/agent-inject-template-config: |
           {{- with secret "secret/data/app/common" -}}
-            export JWT_SECRET="{{ .Data.data.jwt_secret }}"
-            export NODE_ENV="{{ .Data.data.node_env }}"
-            export API_PORT={{ .Data.data.api_port }}
+            export JWT_SECRET={{ .Data.data.jwt_secret | toJSON }}
+            export NODE_ENV={{ .Data.data.node_env | toJSON }}
+            export API_PORT={{ .Data.data.api_port | toJSON }}
           {{- end -}}
     spec:
       # Compte de service associé (nécessaire pour l'auth Vault/K8s)

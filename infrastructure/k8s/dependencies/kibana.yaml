@@ -27,10 +27,10 @@ spec:
         vault.hashicorp.com/agent-inject-secret-config: "secret/data/infra/kibana"
         vault.hashicorp.com/agent-inject-template-config: |
           {{- with secret "secret/data/infra/kibana" -}}
-            export XPACK_SECURITY_ENCRYPTIONKEY="{{ .Data.data.encryption_key }}"
-            export XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY="{{ .Data.data.encryption_key }}"
-            export XPACK_REPORTING_ENCRYPTIONKEY="{{ .Data.data.encryption_key }}"
-            export KIBANA_SYSTEM_PASSWORD="{{ .Data.data.password }}"
+            export XPACK_SECURITY_ENCRYPTIONKEY={{ .Data.data.encryption_key | toJSON }}
+            export XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY={{ .Data.data.encryption_key | toJSON }}
+            export XPACK_REPORTING_ENCRYPTIONKEY={{ .Data.data.encryption_key | toJSON }}
+            export KIBANA_SYSTEM_PASSWORD={{ .Data.data.password | toJSON }}
           {{- end -}}
     spec:
       serviceAccountName: kibana

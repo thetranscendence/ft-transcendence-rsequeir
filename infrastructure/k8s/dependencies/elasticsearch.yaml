@@ -28,7 +28,7 @@ spec:
         vault.hashicorp.com/agent-inject-secret-config: "secret/data/infra/elastic"
         vault.hashicorp.com/agent-inject-template-config: |
           {{- with secret "secret/data/infra/elastic" -}}
-            export ELASTIC_PASSWORD="{{ .Data.data.password }}"
+            export ELASTIC_PASSWORD={{ .Data.data.password | toJSON }}
           {{- end -}}
     spec:
       serviceAccountName: elasticsearch
