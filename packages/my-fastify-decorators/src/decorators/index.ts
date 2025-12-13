@@ -12,6 +12,7 @@ export * from './route-options/http.decorator.js';
 export * from './routes.js';
 export * from './services/inject.decorator.js';
 export * from './services/service.decorator.js';
+export * from './services/container.js';
 export * from './validation/schema.decorator.js';
 
 // WebSocket exports

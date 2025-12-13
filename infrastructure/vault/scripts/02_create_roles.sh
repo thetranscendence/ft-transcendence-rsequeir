@@ -54,9 +54,7 @@ ROLES_LIST=(
 
     # --- APPLICATIONS BACKEND ---
     "gateway-role|gateway-policy|gateway"
-    
-    # Ajoutez vos futurs microservices ici (ex: auth, user, game...)
-    # "auth-service-role|auth-policy|auth-service"
+    "service-template-role|service-template-policy|service-template"
 )
 
 # ==============================================================================

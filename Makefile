@@ -25,7 +25,7 @@ VAULT_DIR   = ./infrastructure/vault
 LOGGER      = ./scripts/logger.sh
 
 # Liste des images locales à construire et à injecter dans le registre du cluster
-IMAGES      = gateway:latest
+IMAGES      = gateway:latest service-template:latest
 
 # Récupération dynamique du Token Root Vault pour l'installation Helm.
 # Ce token permet d'initialiser Vault en mode "Dev" sans avoir à le déverrouiller manuellement.
@@ -59,8 +59,12 @@ up: build import deploy-infra config-vault deploy-services deploy-apps restart-p
 # ------------------------------------------------------------------------------
 build:
 	@$(LOG_STEP) "Phase 1 : Construction des artefacts Docker"
+
 	@$(LOG_INFO) "Construction de l'image : gateway:latest"
 	@docker build -t gateway:latest -f apps/backend-gateway/Dockerfile . > /dev/null
+
+	@$(LOG_INFO) "Construction de l'image : service-template:latest"
+	@docker build -t service-template:latest -f apps/service-template/Dockerfile . > /dev/null
 
 # 2. IMPORT DANS LE CLUSTER
 # ------------------------------------------------------------------------------

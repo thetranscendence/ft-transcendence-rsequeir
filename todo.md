@@ -1,8 +1,6 @@
 # TODO LIST - ft_transcendence
 
 ## 1. Infrastructure & Monitoring
-- [Persistance] **StatefulSets** : Migrer RabbitMQ et Elasticsearch vers des `StatefulSet` avec PVC pour la persistance des données.
-- [SQLite] **Persistance Microservices** : Configurer un Volume (PVC) pour chaque pod de microservice afin de persister sa base de données SQLite locale.
 - [Monitoring] **Prometheus & Grafana** :
   - Déployer Prometheus (collecte de métriques) et Grafana (visualisation).
   - Configurer les datasources et importer des dashboards par défaut (Node Exporter, métriques applicatives).
@@ -31,3 +29,12 @@
 
 ## 4. Backend & Robustesse
 - [Node.js] **Graceful Shutdown** : Gérer `SIGTERM` dans les services Fastify pour couper proprement les connexions (SQLite, RabbitMQ) lors des redémarrages.
+
+
+
+
+- Extraire le Database Service du template pour créer un package qui gère les communications avec la base de données et qui soit réutilisable par les autres microservices.
+
+- Créer un outil pour ajouter / modifier / supprimer un nouveau service applicatif sur la base du service-template : Configuration, Vault, K3s, etc...
+
+- Rédiger un document sur comment utiliser le template pour créer un nouveau service : Création du ServiceAccount, Création du rôle Vault, création de la politique Vault, Création du manifeste K8s, autres ?

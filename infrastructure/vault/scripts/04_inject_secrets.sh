@@ -183,4 +183,17 @@ else
         api_port='$CURRENT_PORT'" > /dev/null
 fi
 
+# --- SERVICE TEMPLATE (DEV) ---------------------------------------------------
+if secret_exists "secret/app/service-template" "node_env"; then
+    log_info "Secrets Service Template existants."
+else
+    log_warn "Création du secret placeholder pour Service Template..."
+    
+    # On crée un secret vide ou avec des valeurs par défaut pour que le chemin existe
+    kubectl exec vault-0 -- sh -c "VAULT_TOKEN=${VAULT_ROOT_TOKEN} vault kv put secret/app/service-template \
+        node_env='development'" > /dev/null
+        
+    log_success "Secrets Service Template injectés."
+fi
+
 log_info "Injection des secrets terminée."
