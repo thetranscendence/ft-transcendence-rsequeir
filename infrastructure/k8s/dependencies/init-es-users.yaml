@@ -2,28 +2,42 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: init-es-users
-  annotations:
-    # On utilise un hook Helm ou on le laisse gérer par Make,
-    # mais ici c'est un Job standard
+  labels:
+    app: elasticsearch-init
+    component: security-setup
 spec:
-  ttlSecondsAfterFinished: 60 # Le pod se supprimera 60s après succès
+  # Nettoyage automatique : Le Pod est supprimé 60s après la réussite du script
+  # pour ne pas laisser de secrets traîner en mémoire inutilement.
+  ttlSecondsAfterFinished: 60
+  
   template:
     metadata:
       annotations:
-        # Injection Vault
+        # ======================================================================
+        # CONFIGURATION DE L'INJECTION VAULT (Zero Trust)
+        # ======================================================================
+        # Active l'agent Vault Sidecar pour ce Job
         vault.hashicorp.com/agent-inject: "true"
-        # On utilise le rôle kibana car il a accès aux deux secrets nécessaires
-        vault.hashicorp.com/role: "kibana-role"
+        
+        # Mode "Pre-Populate" : L'agent récupère les secrets, écrit les fichiers,
+        # puis s'arrête. Idéal pour les Jobs qui n'ont pas besoin de renouvellement.
         vault.hashicorp.com/agent-pre-populate-only: "true"
+        
+        # RÔLE PRIVILÉGIÉ :
+        # On utilise ici un rôle spécifique "elastic-admin-init-role".
+        # C'est le SEUL composant autorisé à accéder simultanément :
+        # 1. Au mot de passe Root "elastic" (pour s'authentifier en Admin)
+        # 2. Au secret "kibana" (pour définir le mot de passe cible)
+        vault.hashicorp.com/role: "elastic-admin-init-role"
 
-        # Récupérer le mot de passe ROOT Elastic
+        # --- SECRET 1 : Identifiants Admin (Source) ---
         vault.hashicorp.com/agent-inject-secret-elastic: "secret/data/infra/elastic"
         vault.hashicorp.com/agent-inject-template-elastic: |
           {{- with secret "secret/data/infra/elastic" -}}
             export ELASTIC_PASSWORD="{{ .Data.data.password }}"
           {{- end -}}
 
-        # Récupérer le mot de passe SYSTEM Kibana (celui qu'on veut définir)
+        # --- SECRET 2 : Identifiants Kibana System (Cible) ---
         vault.hashicorp.com/agent-inject-secret-kibana: "secret/data/infra/kibana"
         vault.hashicorp.com/agent-inject-template-kibana: |
           {{- with secret "secret/data/infra/kibana" -}}
@@ -31,37 +45,29 @@ spec:
           {{- end -}}
 
     spec:
-      serviceAccountName: kibana # Doit correspondre au rôle Vault
+      # Identité Kubernetes liée au rôle Vault "elastic-admin-init-role"
+      serviceAccountName: elastic-admin-init
+      
       restartPolicy: OnFailure
+      
       containers:
       - name: init-users
+        # Image légère contenant 'curl' pour interagir avec l'API Elasticsearch
         image: curlimages/curl:latest
-        command: ["/bin/sh", "-c"]
-        args:
-          - |
-            echo "Chargement des secrets..."
-            . /vault/secrets/elastic
-            . /vault/secrets/kibana
+        
+        # Exécution du script monté depuis la ConfigMap.
+        # Le script va sourcer les secrets injectés par Vault avant de lancer les appels API.
+        command: ["/bin/sh", "/scripts/init_users.sh"]
 
-            echo "Attente de la disponibilité d'Elasticsearch..."
-            until curl -s -u "elastic:$ELASTIC_PASSWORD" http://elasticsearch:42920/_cluster/health | grep -q '"status":"green"\|"status":"yellow"'; do
-              echo "   ... Elasticsearch n'est pas encore prêt. Nouvelle tentative dans 5s."
-              sleep 5
-            done
-
-            echo "Elasticsearch est UP !"
-            echo "Configuration du mot de passe pour l'utilisateur 'kibana_system'..."
-
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-              -u "elastic:$ELASTIC_PASSWORD" \
-              -H "Content-Type: application/json" \
-              -d "{\"password\":\"$KIBANA_SYSTEM_PASSWORD\"}" \
-              http://elasticsearch:42920/_security/user/kibana_system/_password)
-
-            if [ "$HTTP_CODE" -eq 200 ]; then
-              echo "Succès : Mot de passe kibana_system mis à jour."
-              exit 0
-            else
-              echo "Erreur : Impossible de changer le mot de passe (Code HTTP: $HTTP_CODE)"
-              exit 1
-            fi
+        volumeMounts:
+          # Montage du dossier contenant les scripts (init + logger)
+          - name: scripts-vol
+            mountPath: /scripts
+            readOnly: true
+      
+      volumes:
+        # Source : ConfigMap générée par le Makefile (cible deploy-services)
+        - name: scripts-vol
+          configMap:
+            name: es-init-scripts
+            defaultMode: 0755 # Garantit que les scripts sont exécutables

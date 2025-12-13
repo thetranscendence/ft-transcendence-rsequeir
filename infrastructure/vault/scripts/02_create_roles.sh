@@ -29,7 +29,38 @@ fi
 log_info "Démarrage du module de gestion des Rôles (Role Binding)..."
 
 # ==============================================================================
-# 2. DÉFINITION DE LA FONCTION DE CRÉATION
+# 2. CONFIGURATION DES RÔLES
+# ==============================================================================
+
+# Liste des rôles à créer.
+# Format : "NOM_DU_ROLE|POLITIQUES_SEPAREES_PAR_VIRGULES|SERVICE_ACCOUNT_K8S"
+#
+# Changements de sécurité (Kibana) :
+# - kibana-role : Accès restreint uniquement à la configuration Kibana (Runtime).
+# - elastic-admin-init-role : Rôle privilégié pour le Job d'initialisation, 
+#   cumulant l'accès root Elastic et l'accès système Kibana.
+
+ROLES_LIST=(
+    # --- INFRASTRUCTURE DE MESSAGERIE & DONNÉES ---
+    "rabbitmq-role|rabbitmq-policy|rabbitmq"
+    "elastic-role|elastic-policy|elasticsearch"
+    "logstash-role|logstash-policy|logstash"
+
+    # --- KIBANA & MONITORING ---
+    # Runtime Application : Moindre privilège
+    "kibana-role|kibana-policy|kibana"
+    # Maintenance & Setup : Privilèges élevés (Root Elastic + System Kibana)
+    "elastic-admin-init-role|elastic-policy,kibana-policy|elastic-admin-init"
+
+    # --- APPLICATIONS BACKEND ---
+    "gateway-role|gateway-policy|gateway"
+    
+    # Ajoutez vos futurs microservices ici (ex: auth, user, game...)
+    # "auth-service-role|auth-policy|auth-service"
+)
+
+# ==============================================================================
+# 3. DÉFINITION DE LA FONCTION DE CRÉATION
 # ==============================================================================
 
 # Fonction générique pour créer ou mettre à jour un rôle
@@ -62,29 +93,20 @@ create_role() {
 }
 
 # ==============================================================================
-# 3. APPLICATION DES RÔLES
+# 4. APPLICATION DES RÔLES
 # ==============================================================================
 
-# A. INFRASTRUCTURE ------------------------------------------------------------
+count=0
 
-# RabbitMQ : Accès aux identifiants admin et cookie Erlang
-create_role "rabbitmq-role" "rabbitmq-policy" "rabbitmq"
+for role_config in "${ROLES_LIST[@]}"; do
+    # Extraction des champs via le séparateur '|'
+    IFS='|' read -r role_name policies sa_name <<< "$role_config"
+    
+    # Appel de la fonction de création
+    # On trim les espaces éventuels pour la robustesse
+    create_role "$(echo $role_name | xargs)" "$(echo $policies | xargs)" "$(echo $sa_name | xargs)"
+    
+    ((count+=1))
+done
 
-# Elasticsearch : Accès "root" pour l'initialisation du cluster
-create_role "elastic-role" "elastic-policy" "elasticsearch"
-
-# Kibana : Accès à sa propre config ET au cluster Elastic (monitoring/setup)
-create_role "kibana-role" "kibana-policy" "kibana"
-
-# Logstash : Droit d'écriture (ingestion) dans Elastic
-create_role "logstash-role" "logstash-policy" "logstash"
-
-# B. APPLICATIONS --------------------------------------------------------------
-
-# API Gateway : Accès aux secrets partagés (JWT, Env, Ports)
-create_role "gateway-role" "gateway-policy" "gateway"
-
-# Note : De nouveaux rôles (ex: auth-service, user-service) devront être ajoutés
-# ici au fur et à mesure du développement des microservices.
-
-log_info "Tous les rôles ont été configurés avec succès."
+log_info "Total : $count rôle(s) configuré(s) avec succès."
