@@ -92,10 +92,13 @@ deploy-infra:
 		helm repo add hashicorp https://helm.releases.hashicorp.com > /dev/null 2>&1; \
 		helm repo update > /dev/null 2>&1; \
 		helm upgrade --install vault hashicorp/vault \
-			--set "server.dev.enabled=true" \
-			--set "server.dev.devRootToken=$(VAULT_TOKEN)" \
-			--set "injector.enabled=true" \
-			--wait > /dev/null; \
+    --set "server.dev.enabled=false" \
+    --set "server.dataStorage.enabled=true" \
+    --set "server.dataStorage.size=1Gi" \
+    --set "server.dataStorage.storageClass=local-path" \
+    --set "server.standalone.enabled=true" \
+    --set "injector.enabled=true" \
+    --wait > /dev/null; \
 		source $(LOGGER) && log_success "Vault installé avec succès."; \
 	fi
 

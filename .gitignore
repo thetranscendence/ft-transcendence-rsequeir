@@ -7,6 +7,9 @@
 *.env
 .env.*
 
+# Secrets Vault Local (Mode Persistant)
+cluster-keys.json
+
 # On autorise les exemples pour aider les autres développeurs
 !.env.example
 

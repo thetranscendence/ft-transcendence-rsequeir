@@ -29,7 +29,28 @@ fi
 log_info "Démarrage du module de gestion des secrets..."
 
 # ==============================================================================
-# 2. FONCTIONS UTILITAIRES
+# 2. ACTIVATION DU MOTEUR DE SECRETS (KV V2)
+# ==============================================================================
+
+# En mode Production/Persistant, le moteur 'secret/' n'est pas monté par défaut.
+# Nous devons l'activer explicitement avant d'écrire dedans.
+
+if kubectl exec vault-0 -- sh -c "VAULT_TOKEN=${VAULT_ROOT_TOKEN} vault secrets list" | grep -q "secret/"; then
+    log_info "Moteur de secrets 'secret/' déjà actif. (Skip)"
+else
+    log_warn "Activation du moteur KV (Version 2) sur le chemin 'secret/'..."
+    
+    # Activation explicite en version 2 (Requis pour les chemins data/ et metadata/)
+    if kubectl exec vault-0 -- sh -c "VAULT_TOKEN=${VAULT_ROOT_TOKEN} vault secrets enable -path=secret -version=2 kv" > /dev/null 2>&1; then
+        log_success "Moteur KV activé avec succès."
+    else
+        log_error "Échec de l'activation du moteur de secrets."
+        exit 1
+    fi
+fi
+
+# ==============================================================================
+# 3. FONCTIONS UTILITAIRES
 # ==============================================================================
 
 # Génère une chaîne aléatoire alphanumérique de 32 caractères
@@ -46,7 +67,7 @@ secret_exists() {
 }
 
 # ==============================================================================
-# 3. GESTION DES SECRETS INFRASTRUCTURE
+# 4. GESTION DES SECRETS INFRASTRUCTURE
 # ==============================================================================
 
 # --- A. RABBITMQ --------------------------------------------------------------
@@ -119,7 +140,7 @@ else
 fi
 
 # ==============================================================================
-# 4. GESTION DES SECRETS APPLICATIFS (PARTAGÉS)
+# 5. GESTION DES SECRETS APPLICATIFS (PARTAGÉS)
 # ==============================================================================
 
 # --- APP COMMON (Gateway, Auth, etc.) -----------------------------------------

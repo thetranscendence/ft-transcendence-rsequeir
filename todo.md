@@ -1,10 +1,6 @@
 # TODO LIST - ft_transcendence
 
-## 1. Vault & Gestion des Secrets
-- [Injection] **Sécurisation** : Sécuriser les templates d'injection Vault Agent avec le formatage JSON (`{{ .Data.data.password | toJSON }}`) pour prévenir les erreurs de syntaxe shell.
-- [Stockage] **Persistance Vault** : Migrer le stockage de Vault (RAM) vers un stockage disque (PVC) pour survivre aux arrêts du cluster.
-
-## 2. Infrastructure & Monitoring
+## 1. Infrastructure & Monitoring
 - [Persistance] **StatefulSets** : Migrer RabbitMQ et Elasticsearch vers des `StatefulSet` avec PVC pour la persistance des données.
 - [SQLite] **Persistance Microservices** : Configurer un Volume (PVC) pour chaque pod de microservice afin de persister sa base de données SQLite locale.
 - [Monitoring] **Prometheus & Grafana** :
@@ -12,7 +8,7 @@
   - Configurer les datasources et importer des dashboards par défaut (Node Exporter, métriques applicatives).
 - [Orchestration] **Probes** : Ajouter `livenessProbe` et `readinessProbe` sur tous les services d'infrastructure.
 
-## 3. Développement & Packages Partagés (TypeScript)
+## 2. Développement & Packages Partagés (TypeScript)
 *Créer des librairies internes (dans `packages/`) pour standardiser le code des microservices :*
 
 - [Package] **@transcendence/config (Vault)** :
@@ -28,10 +24,10 @@
   - Exposer un endpoint `/metrics` standard pour le scraping Prometheus.
   - Fournir des helpers pour créer des compteurs/gauges métiers (ex: "parties jouées", "utilisateurs connectés").
 
-## 4. Sécurité Kubernetes & Réseau
+## 3. Sécurité Kubernetes & Réseau
 - [Ingress] **HTTPS/WSS** : Forcer le HTTPS et le support WebSocket Sécurisé (WSS).
 - [Réseau] **NetworkPolicies** : Isoler les flux réseau (ex: seul Logstash parle à Elastic, seul le Gateway parle au Frontend).
 - [Context] **SecurityContext** : Durcir les pods (`runAsNonRoot`, `readOnlyRootFilesystem`) pour limiter la surface d'attaque.
 
-## 5. Backend & Robustesse
+## 4. Backend & Robustesse
 - [Node.js] **Graceful Shutdown** : Gérer `SIGTERM` dans les services Fastify pour couper proprement les connexions (SQLite, RabbitMQ) lors des redémarrages.
