@@ -99,6 +99,25 @@ else
     log_success "Secrets Kibana injectés."
 fi
 
+# --- D. LOGSTASH --------------------------------------------------------------
+# Nécessite : username, password
+# Objectif : Créer un utilisateur spécifique (writer) pour ne plus utiliser 'elastic'
+if secret_exists "secret/infra/logstash" "password"; then
+    log_info "Secrets Logstash existants. (Conservation)"
+else
+    log_warn "Génération initiale des secrets Logstash (Writer)..."
+    
+    # On évite de hardcoder le nom pour faciliter la rotation ou le changement de user
+    LOGSTASH_USER="${LOGSTASH_USER:-logstash_writer}"
+    LOGSTASH_PASS=$(generate_pwd)
+    
+    kubectl exec vault-0 -- sh -c "VAULT_TOKEN=${VAULT_ROOT_TOKEN} vault kv put secret/infra/logstash \
+        username='$LOGSTASH_USER' \
+        password='$LOGSTASH_PASS'" > /dev/null
+        
+    log_success "Secrets Logstash injectés."
+fi
+
 # ==============================================================================
 # 4. GESTION DES SECRETS APPLICATIFS (PARTAGÉS)
 # ==============================================================================

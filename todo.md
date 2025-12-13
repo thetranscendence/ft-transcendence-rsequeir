@@ -1,8 +1,6 @@
 # TODO LIST - ft_transcendence
 
 ## 1. Vault & Gestion des Secrets
-- [Policy] **Kibana** : Supprimer l'accès global au secret `elastic` dans la policy `kibana`. Configurer les comptes systèmes (kibana_system) via un job d'initialisation dédié.
-- [Policy] **Logstash** : Créer un utilisateur spécifique pour Logstash (writer) afin de ne plus utiliser le mot de passe "superuser" `elastic`.
 - [Injection] **Sécurisation** : Sécuriser les templates d'injection Vault Agent avec le formatage JSON (`{{ .Data.data.password | toJSON }}`) pour prévenir les erreurs de syntaxe shell.
 - [Stockage] **Persistance Vault** : Migrer le stockage de Vault (RAM) vers un stockage disque (PVC) pour survivre aux arrêts du cluster.
 

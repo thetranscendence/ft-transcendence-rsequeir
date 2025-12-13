@@ -50,7 +50,7 @@ ROLES_LIST=(
     # Runtime Application : Moindre privilège
     "kibana-role|kibana-policy|kibana"
     # Maintenance & Setup : Privilèges élevés (Root Elastic + System Kibana)
-    "elastic-admin-init-role|elastic-policy,kibana-policy|elastic-admin-init"
+    "elastic-admin-init-role|elastic-policy,kibana-policy,logstash-policy|elastic-admin-init"
 
     # --- APPLICATIONS BACKEND ---
     "gateway-role|gateway-policy|gateway"

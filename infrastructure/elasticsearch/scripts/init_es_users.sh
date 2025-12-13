@@ -4,17 +4,17 @@
 # ==============================================================================
 # DESCRIPTION :
 #   Ce script configure les mots de passe des utilisateurs systèmes (Built-in)
-#   d'Elasticsearch.
+#   d'Elasticsearch et crée les utilisateurs techniques nécessaires (Logstash).
 #
 # CONTEXTE :
 #   Par défaut, Elasticsearch initialise le compte 'elastic' (superuser).
-#   Cependant, Kibana nécessite un utilisateur technique spécifique ('kibana_system')
-#   pour fonctionner et se connecter au cluster de monitoring.
+#   Kibana nécessite un utilisateur technique 'kibana_system'.
+#   Logstash nécessite un utilisateur 'writer' pour indexer les logs sans être root.
 #
 # OBJECTIFS :
 #   1. Attendre la disponibilité du cluster Elasticsearch (Healthcheck).
-#   2. Utiliser le compte 'elastic' (admin) pour définir le mot de passe de
-#      l'utilisateur 'kibana_system'.
+#   2. Configurer le mot de passe de 'kibana_system'.
+#   3. Créer/Mettre à jour l'utilisateur technique pour Logstash.
 # ==============================================================================
 
 # Arrêt immédiat en cas d'erreur (Fail-fast)
@@ -29,9 +29,7 @@ RETRY_DELAY=5
 # ==============================================================================
 
 # Importation du logger partagé
-# Le fichier logger.sh est injecté dans le même volume (/scripts) via la ConfigMap.
 if [ -f /scripts/logger.sh ]; then
-    # Note : Sur Alpine (sh), la commande 'source' peut être absente, on utilise '.'
     . /scripts/logger.sh
 else
     echo "Erreur critique : Utilitaires de logging introuvables (/scripts/logger.sh)"
@@ -47,9 +45,10 @@ log_header "INITIALISATION DES UTILISATEURS SYSTÈMES (ELASTIC)"
 log_step "Chargement des identifiants injectés par Vault..."
 
 # Les fichiers sont injectés par le Vault Agent Sidecar dans /vault/secrets/
-if [ -f /vault/secrets/elastic ] && [ -f /vault/secrets/kibana ]; then
+if [ -f /vault/secrets/elastic ] && [ -f /vault/secrets/kibana ] && [ -f /vault/secrets/logstash ]; then
     . /vault/secrets/elastic
     . /vault/secrets/kibana
+    . /vault/secrets/logstash
 else
     log_error "Fichiers de secrets introuvables dans /vault/secrets/."
     exit 1
@@ -66,6 +65,11 @@ if [ -z "$KIBANA_SYSTEM_PASSWORD" ]; then
     exit 1
 fi
 
+if [ -z "$LOGSTASH_USER" ] || [ -z "$LOGSTASH_PASSWORD" ]; then
+    log_error "Les identifiants LOGSTASH sont incomplets."
+    exit 1
+fi
+
 log_success "Secrets chargés en mémoire."
 
 # ==============================================================================
@@ -75,8 +79,6 @@ log_success "Secrets chargés en mémoire."
 log_step "Connexion au cluster Elasticsearch ($ES_HOST)..."
 
 # Boucle d'attente active (Retry Pattern)
-# On attend que le statut du cluster soit 'green' ou 'yellow'.
-# Note : 'yellow' est l'état normal pour un cluster single-node (replicas non assignés).
 until curl -s -u "elastic:$ELASTIC_PASSWORD" "$ES_HOST/_cluster/health" | grep -q '"status":"green"\|"status":"yellow"'; do
     log_warn "Cluster indisponible ou en cours d'initialisation. Nouvelle tentative dans ${RETRY_DELAY}s..."
     sleep $RETRY_DELAY
@@ -88,26 +90,66 @@ log_success "Connexion établie : Le cluster Elasticsearch est opérationnel."
 # 4. CONFIGURATION DES COMPTES SYSTÈMES
 # ==============================================================================
 
+# --- A. KIBANA SYSTEM ---------------------------------------------------------
 log_step "Configuration de l'utilisateur technique 'kibana_system'..."
 
-# Appel API à l'endpoint de sécurité native (_security)
-# On utilise curl en mode silencieux (-s) mais on capture le code HTTP (-w)
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+HTTP_CODE_KIBANA=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
   -u "elastic:$ELASTIC_PASSWORD" \
   -H "Content-Type: application/json" \
   -d "{\"password\":\"$KIBANA_SYSTEM_PASSWORD\"}" \
   "$ES_HOST/_security/user/kibana_system/_password")
 
-if [ "$HTTP_CODE" -eq 200 ]; then
+if [ "$HTTP_CODE_KIBANA" -eq 200 ]; then
     log_success "Le mot de passe de 'kibana_system' a été mis à jour avec succès."
-    
-    # Message de fin pour les logs du Job Kubernetes
+else
+    log_error "Échec critique lors de la mise à jour 'kibana_system'."
+    log_error "Code réponse HTTP : $HTTP_CODE_KIBANA"
+    exit 1
+fi
+
+# --- B. LOGSTASH WRITER (ROLE & USER) ---
+log_step "Configuration du rôle et de l'utilisateur Logstash..."
+
+# 1. Création du Rôle Personnalisé (Moindre Privilège)
+#    On autorise la création et l'écriture UNIQUEMENT sur les index ft_transcendence-*
+ROLE_PAYLOAD='{
+  "cluster": ["monitor"],
+  "indices": [
+    {
+      "names": ["ft_transcendence-*"],
+      "privileges": ["write", "create_index", "index", "create", "auto_configure"]
+    }
+  ]
+}'
+
+HTTP_CODE_ROLE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+  -u "elastic:$ELASTIC_PASSWORD" \
+  -H "Content-Type: application/json" \
+  -d "$ROLE_PAYLOAD" \
+  "$ES_HOST/_security/role/logstash_writer_role")
+
+if [ "$HTTP_CODE_ROLE" -eq 200 ] || [ "$HTTP_CODE_ROLE" -eq 201 ]; then
+    log_success "Rôle 'logstash_writer_role' créé/mis à jour."
+else
+    log_error "Échec création rôle Logstash. Code: $HTTP_CODE_ROLE"
+    exit 1
+fi
+
+# 2. Assignation du Rôle à l'utilisateur
+USER_PAYLOAD="{\"password\":\"$LOGSTASH_PASSWORD\",\"roles\":[\"logstash_system\",\"logstash_writer_role\"],\"full_name\":\"Logstash Writer Service\"}"
+
+HTTP_CODE_LOGSTASH=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+  -u "elastic:$ELASTIC_PASSWORD" \
+  -H "Content-Type: application/json" \
+  -d "$USER_PAYLOAD" \
+  "$ES_HOST/_security/user/$LOGSTASH_USER")
+
+if [ "$HTTP_CODE_LOGSTASH" -eq 200 ] || [ "$HTTP_CODE_LOGSTASH" -eq 201 ]; then
+    log_success "Utilisateur '${LOGSTASH_USER}' configuré avec succès."
     echo ""
-    log_info "Initialisation terminée. Le Job va s'arrêter."
+    log_info "Initialisation terminée."
     exit 0
 else
-    log_error "Échec critique lors de la mise à jour du mot de passe."
-    log_error "Code réponse HTTP : $HTTP_CODE"
-    log_error "Vérifiez les logs Elasticsearch pour plus de détails."
+    log_error "Échec configuration utilisateur Logstash. Code: $HTTP_CODE_LOGSTASH"
     exit 1
 fi

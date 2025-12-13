@@ -2,9 +2,9 @@
 # POLITIQUE DE SÉCURITÉ : SERVICE LOGSTASH (ETL)
 # ==============================================================================
 # DESCRIPTION :
-#   Cette politique permet au service Logstash d'accéder aux identifiants du
-#   cluster Elasticsearch. C'est indispensable pour que le pipeline de traitement
-#   puisse envoyer (indexer) les logs traités vers la base de données.
+#   Cette politique définit les permissions pour le service Logstash.
+#   Elle applique le principe de moindre privilège en limitant l'accès
+#   uniquement aux identifiants dédiés à l'écriture des logs.
 #
 # CONSOMMATEUR :
 #   - Role Vault : logstash-role
@@ -12,24 +12,23 @@
 #
 # USAGE :
 #   Injecté via le "Vault Agent Sidecar" dans le Pod Logstash.
-#   Le secret est utilisé pour configurer l'authentification du plugin "output"
-#   dans le fichier de pipeline (logstash.conf).
+#   Ces secrets permettent de configurer l'output Elasticsearch dans le pipeline.
 # ==============================================================================
 
-# Accès en lecture aux crédentials Elasticsearch.
+# Accès en lecture aux identifiants spécifiques "Logstash Writer".
 #
-# POURQUOI ?
-#   Logstash agit comme un "writer" dans le cluster Elastic. Il doit s'authentifier
-#   pour avoir le droit d'écrire dans les index (ex: ft_transcendence-YYYY.MM.dd).
-#   Dans cette configuration, il utilise le compte "elastic" (superuser).
+# CHANGEMENT DE SÉCURITÉ :
+#   L'accès au compte "elastic" (superuser) a été révoqué.
+#   Logstash utilise désormais un compte technique restreint ne possédant
+#   que les droits d'ingestion (indexation).
 #
 # NOTE SUR LE CHEMIN (KV Version 2) :
-#   L'ajout de "/data/" est requis pour les politiques KV-v2.
-#   - Chemin physique (Policy) : secret/data/infra/elastic
-#   - Chemin logique (CLI)     : secret/infra/elastic
+#   - Chemin physique (Policy) : secret/data/infra/logstash
+#   - Chemin logique (CLI)     : secret/infra/logstash
 #
 # DONNÉES ACCESSIBLES :
-#   - password : Le mot de passe du super-utilisateur "elastic".
-path "secret/data/infra/elastic" {
+#   - username : Nom de l'utilisateur technique (ex: logstash_writer).
+#   - password : Mot de passe associé généré par Vault.
+path "secret/data/infra/logstash" {
   capabilities = ["read"]
 }

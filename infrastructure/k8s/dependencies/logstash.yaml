@@ -26,12 +26,18 @@ spec:
       labels:
         app: logstash
       annotations:
+        # ======================================================================
+        # CONFIGURATION DE L'INJECTION VAULT (Zero Trust)
+        # ======================================================================
         vault.hashicorp.com/agent-inject: "true"
         vault.hashicorp.com/role: "logstash-role"
-        vault.hashicorp.com/agent-inject-secret-config: "secret/data/infra/elastic"
+        
+        # Injection des identifiants spécifiques "Writer" pour Logstash
+        vault.hashicorp.com/agent-inject-secret-config: "secret/data/infra/logstash"
         vault.hashicorp.com/agent-inject-template-config: |
-          {{- with secret "secret/data/infra/elastic" -}}
-            export ELASTIC_PASSWORD="{{ .Data.data.password }}"
+          {{- with secret "secret/data/infra/logstash" -}}
+            export LOGSTASH_USER="{{ .Data.data.username }}"
+            export LOGSTASH_PASSWORD="{{ .Data.data.password }}"
           {{- end -}}
     spec:
       serviceAccountName: logstash
@@ -51,6 +57,7 @@ spec:
               subPath: logstash.conf
           
           command: ["/bin/sh", "-c"]
+          # On source le fichier config généré par Vault pour charger les variables
           args: [". /vault/secrets/config && /usr/local/bin/docker-entrypoint"]
 
       volumes:

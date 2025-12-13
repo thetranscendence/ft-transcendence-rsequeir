@@ -28,6 +28,7 @@ spec:
         # C'est le SEUL composant autorisé à accéder simultanément :
         # 1. Au mot de passe Root "elastic" (pour s'authentifier en Admin)
         # 2. Au secret "kibana" (pour définir le mot de passe cible)
+        # 3. Au secret "logstash" (pour définir le mot de passe cible)
         vault.hashicorp.com/role: "elastic-admin-init-role"
 
         # --- SECRET 1 : Identifiants Admin (Source) ---
@@ -42,6 +43,15 @@ spec:
         vault.hashicorp.com/agent-inject-template-kibana: |
           {{- with secret "secret/data/infra/kibana" -}}
             export KIBANA_SYSTEM_PASSWORD="{{ .Data.data.password }}"
+          {{- end -}}
+
+        # --- SECRET 3 : Identifiants Logstash Writer (Cible) ---
+        vault.hashicorp.com/agent-inject-secret-logstash: "secret/data/infra/logstash"
+        vault.hashicorp.com/agent-inject-template-logstash: |
+          {{- with secret "secret/data/infra/logstash" -}}
+            # On récupère le nom d'utilisateur dynamique stocké dans Vault
+            export LOGSTASH_USER="{{ .Data.data.username }}"
+            export LOGSTASH_PASSWORD="{{ .Data.data.password }}"
           {{- end -}}
 
     spec:
